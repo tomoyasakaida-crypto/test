@@ -23,6 +23,12 @@ MCP (Model Context Protocol) Server for Autodesk Platform Services (APS).
 - `get_item_versions` - アイテムの全バージョン履歴の取得
 - `get_item_tip` - アイテムの最新バージョン情報の取得
 
+#### Model Derivative API
+- `get_manifest` - モデルのマニフェスト取得
+- `get_metadata_views` - モデル内のビュー（視点）一覧取得
+- `get_object_tree` - オブジェクトツリー（階層構造）の取得
+- `get_all_properties` - すべてのオブジェクトのプロパティ取得
+
 ## セットアップ
 
 ### 1. APS認証情報の取得
@@ -205,16 +211,71 @@ get_item_tip
 
 ファイルの最新バージョン情報を取得します。Derivative URN（Model Derivative APIで使用）も含まれます。
 
+### Model Derivative API
+
+#### マニフェストの取得
+
+```
+get_manifest
+```
+
+パラメータ：
+- `urn`: モデルのURN（`get_item_tip`で取得したDerivative URN）
+
+モデルの変換状態と派生ファイルの情報を取得します。
+
+#### メタデータビュー一覧の取得
+
+```
+get_metadata_views
+```
+
+パラメータ：
+- `urn`: モデルのURN
+
+モデル内のビュー（3Dビュー、2D図面等）の一覧を取得します。
+
+#### オブジェクトツリーの取得
+
+```
+get_object_tree
+```
+
+パラメータ：
+- `urn`: モデルのURN
+- `guid`: ビューGUID（`get_metadata_views`で取得）
+
+モデルの階層構造（壁、柱、ドア等の親子関係）を取得します。
+
+#### 全プロパティの取得
+
+```
+get_all_properties
+```
+
+パラメータ：
+- `urn`: モデルのURN
+- `guid`: ビューGUID
+
+すべてのオブジェクトのプロパティ（寸法、材質、位置等）を取得します。
+
 ## ワークフロー例
 
-### BIM360/ACCプロジェクトからモデルデータを取得
+### BIM360/ACCプロジェクトからモデルの要素データを取得
+
+完全なワークフロー：
 
 1. `list_hubs` でハブ一覧を取得
 2. `list_projects` で特定ハブのプロジェクト一覧を取得
 3. `get_project_top_folders` でプロジェクトのトップフォルダを取得
 4. `get_folder_contents` でフォルダ内のファイルを探索
 5. `get_item_tip` で目的のファイルの最新バージョンとDerivative URNを取得
-6. Derivative URNを使用してModel Derivative APIでモデルデータを取得（将来実装予定）
+6. `get_manifest` でモデルの変換状態を確認
+7. `get_metadata_views` でモデル内のビュー一覧を取得
+8. `get_object_tree` でオブジェクトの階層構造を取得
+9. `get_all_properties` ですべてのオブジェクトのプロパティ（寸法、材質等）を取得
+
+このワークフローで、BIM360/ACCプロジェクト内のRevitモデル等から、壁、柱、ドア等の要素データと詳細プロパティを取得できます。
 
 ## 開発
 

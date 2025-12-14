@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import base64
 from typing import Any
 from dotenv import load_dotenv
 
@@ -15,6 +16,36 @@ from mcp.types import (
 import mcp.server.stdio
 
 from .aps_client import APSClient
+
+
+def encode_urn(urn: str) -> str:
+    """
+    Encode URN to Base64 URL-safe format for Model Derivative API.
+
+    Args:
+        urn: URN string (e.g., urn:adsk.viewing:fs.file:...)
+
+    Returns:
+        Base64 URL-safe encoded URN
+    """
+    return base64.urlsafe_b64encode(urn.encode()).decode().rstrip('=')
+
+
+def decode_urn(encoded_urn: str) -> str:
+    """
+    Decode Base64 URL-safe URN.
+
+    Args:
+        encoded_urn: Base64 URL-safe encoded URN
+
+    Returns:
+        Decoded URN string
+    """
+    # Add padding if needed
+    padding = 4 - len(encoded_urn) % 4
+    if padding != 4:
+        encoded_urn += '=' * padding
+    return base64.urlsafe_b64decode(encoded_urn.encode()).decode()
 
 
 # Load environment variables
@@ -223,6 +254,71 @@ async def list_tools() -> list[Tool]:
                     }
                 },
                 "required": ["project_id", "item_id"]
+            }
+        ),
+        # Model Derivative API Tools
+        Tool(
+            name="get_manifest",
+            description="Get the manifest of a translated model",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "urn": {
+                        "type": "string",
+                        "description": "Model URN (will be automatically encoded if needed)"
+                    }
+                },
+                "required": ["urn"]
+            }
+        ),
+        Tool(
+            name="get_metadata_views",
+            description="Get list of viewable items (metadata views) in a model",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "urn": {
+                        "type": "string",
+                        "description": "Model URN"
+                    }
+                },
+                "required": ["urn"]
+            }
+        ),
+        Tool(
+            name="get_object_tree",
+            description="Get the object tree (hierarchy) of a model view",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "urn": {
+                        "type": "string",
+                        "description": "Model URN"
+                    },
+                    "guid": {
+                        "type": "string",
+                        "description": "View GUID (from get_metadata_views)"
+                    }
+                },
+                "required": ["urn", "guid"]
+            }
+        ),
+        Tool(
+            name="get_all_properties",
+            description="Get all properties of all objects in a model view",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "urn": {
+                        "type": "string",
+                        "description": "Model URN"
+                    },
+                    "guid": {
+                        "type": "string",
+                        "description": "View GUID (from get_metadata_views)"
+                    }
+                },
+                "required": ["urn", "guid"]
             }
         ),
     ]
@@ -455,6 +551,128 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             derivatives = version.get("relationships", {}).get("derivatives", {}).get("data", {})
             if derivatives:
                 result += f"- Derivative URN: {derivatives.get('id', 'N/A')}\n"
+
+            return [TextContent(type="text", text=result)]
+
+        # Model Derivative API handlers
+        elif name == "get_manifest":
+            urn = arguments["urn"]
+            # Encode URN if it starts with "urn:"
+            if urn.startswith("urn:"):
+                urn = encode_urn(urn)
+
+            response = await aps_client.request(
+                "GET",
+                f"/modelderivative/v2/designdata/{urn}/manifest"
+            )
+
+            result = f"Manifest:\n"
+            result += f"- Type: {response.get('type', 'N/A')}\n"
+            result += f"- URN: {response.get('urn', 'N/A')}\n"
+            result += f"- Status: {response.get('status', 'N/A')}\n"
+            result += f"- Progress: {response.get('progress', 'N/A')}\n"
+
+            derivatives = response.get("derivatives", [])
+            if derivatives:
+                result += f"\nDerivatives ({len(derivatives)}):\n"
+                for deriv in derivatives:
+                    result += f"\n- Output Type: {deriv.get('outputType', 'N/A')}\n"
+                    children = deriv.get("children", [])
+                    if children:
+                        result += f"  Children ({len(children)}):\n"
+                        for child in children[:5]:  # Limit to first 5
+                            result += f"  - Type: {child.get('type', 'N/A')}\n"
+                            result += f"    Role: {child.get('role', 'N/A')}\n"
+                            result += f"    GUID: {child.get('guid', 'N/A')}\n"
+
+            return [TextContent(type="text", text=result)]
+
+        elif name == "get_metadata_views":
+            urn = arguments["urn"]
+            if urn.startswith("urn:"):
+                urn = encode_urn(urn)
+
+            response = await aps_client.request(
+                "GET",
+                f"/modelderivative/v2/designdata/{urn}/metadata"
+            )
+
+            metadata = response.get("data", {}).get("metadata", [])
+            result = f"Found {len(metadata)} viewable items:\n\n"
+
+            for item in metadata:
+                result += f"- Name: {item.get('name', 'N/A')}\n"
+                result += f"  GUID: {item.get('guid', 'N/A')}\n"
+                result += f"  Role: {item.get('role', 'N/A')}\n\n"
+
+            return [TextContent(type="text", text=result)]
+
+        elif name == "get_object_tree":
+            urn = arguments["urn"]
+            guid = arguments["guid"]
+
+            if urn.startswith("urn:"):
+                urn = encode_urn(urn)
+
+            response = await aps_client.request(
+                "GET",
+                f"/modelderivative/v2/designdata/{urn}/metadata/{guid}"
+            )
+
+            def format_tree(objects, parent_id=None, level=0, max_items=50):
+                """Format object tree with indentation."""
+                result_text = ""
+                count = 0
+                for obj in objects:
+                    if count >= max_items:
+                        result_text += "  " * level + "... (truncated)\n"
+                        break
+                    if obj.get("objects"):
+                        result_text += "  " * level + f"- {obj.get('name', 'N/A')} (ID: {obj.get('objectid', 'N/A')})\n"
+                        result_text += format_tree(obj["objects"], obj.get("objectid"), level + 1, max_items - count)
+                        count += len(obj["objects"])
+                    else:
+                        result_text += "  " * level + f"- {obj.get('name', 'N/A')} (ID: {obj.get('objectid', 'N/A')})\n"
+                    count += 1
+                return result_text
+
+            objects = response.get("data", {}).get("objects", [])
+            result = f"Object Tree (showing first 50 items):\n\n"
+            result += format_tree(objects)
+
+            return [TextContent(type="text", text=result)]
+
+        elif name == "get_all_properties":
+            urn = arguments["urn"]
+            guid = arguments["guid"]
+
+            if urn.startswith("urn:"):
+                urn = encode_urn(urn)
+
+            response = await aps_client.request(
+                "GET",
+                f"/modelderivative/v2/designdata/{urn}/metadata/{guid}/properties"
+            )
+
+            collection = response.get("data", {}).get("collection", [])
+            result = f"Found {len(collection)} objects with properties:\n\n"
+
+            # Show first 20 objects
+            for item in collection[:20]:
+                result += f"Object ID: {item.get('objectid', 'N/A')}\n"
+                result += f"  Name: {item.get('name', 'N/A')}\n"
+
+                properties = item.get("properties", {})
+                if properties:
+                    result += "  Properties:\n"
+                    # Show first 10 properties
+                    for key, value in list(properties.items())[:10]:
+                        result += f"    - {key}: {value}\n"
+
+                result += "\n"
+
+            if len(collection) > 20:
+                result += f"... and {len(collection) - 20} more objects\n"
 
             return [TextContent(type="text", text=result)]
 
