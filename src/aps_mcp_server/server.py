@@ -130,6 +130,101 @@ async def list_tools() -> list[Tool]:
                 "required": ["bucket_key", "object_key"]
             }
         ),
+        # AEC Data Model API Tools
+        Tool(
+            name="list_hubs",
+            description="List all hubs (accounts) accessible in AEC Data Model",
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
+        ),
+        Tool(
+            name="list_projects",
+            description="List all projects in a hub",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "hub_id": {
+                        "type": "string",
+                        "description": "Hub ID (e.g., b.xxx)"
+                    }
+                },
+                "required": ["hub_id"]
+            }
+        ),
+        Tool(
+            name="get_project_top_folders",
+            description="Get top-level folders in a project",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "hub_id": {
+                        "type": "string",
+                        "description": "Hub ID"
+                    },
+                    "project_id": {
+                        "type": "string",
+                        "description": "Project ID (e.g., b.xxx)"
+                    }
+                },
+                "required": ["hub_id", "project_id"]
+            }
+        ),
+        Tool(
+            name="get_folder_contents",
+            description="Get contents (folders and items) of a folder",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {
+                        "type": "string",
+                        "description": "Project ID"
+                    },
+                    "folder_id": {
+                        "type": "string",
+                        "description": "Folder ID (e.g., urn:adsk.wipprod:fs.folder:xxx)"
+                    }
+                },
+                "required": ["project_id", "folder_id"]
+            }
+        ),
+        Tool(
+            name="get_item_versions",
+            description="Get all versions of an item",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {
+                        "type": "string",
+                        "description": "Project ID"
+                    },
+                    "item_id": {
+                        "type": "string",
+                        "description": "Item ID (e.g., urn:adsk.wipprod:dm.lineage:xxx)"
+                    }
+                },
+                "required": ["project_id", "item_id"]
+            }
+        ),
+        Tool(
+            name="get_item_tip",
+            description="Get the latest version (tip) of an item",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {
+                        "type": "string",
+                        "description": "Project ID"
+                    },
+                    "item_id": {
+                        "type": "string",
+                        "description": "Item ID"
+                    }
+                },
+                "required": ["project_id", "item_id"]
+            }
+        ),
     ]
 
 
@@ -231,6 +326,135 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             result += f"- Content-Type: {response.get('contentType', 'N/A')}\n"
             result += f"- SHA1: {response.get('sha1', 'N/A')}\n"
             result += f"- Location: {response.get('location', 'N/A')}\n"
+
+            return [TextContent(type="text", text=result)]
+
+        # AEC Data Model API handlers
+        elif name == "list_hubs":
+            response = await aps_client.request(
+                "GET",
+                "/project/v1/hubs"
+            )
+
+            hubs = response.get("data", [])
+            result = f"Found {len(hubs)} hubs:\n\n"
+            for hub in hubs:
+                result += f"- {hub['attributes']['name']}\n"
+                result += f"  ID: {hub['id']}\n"
+                result += f"  Type: {hub['attributes'].get('extension', {}).get('type', 'N/A')}\n"
+                result += f"  Region: {hub['attributes'].get('region', 'N/A')}\n\n"
+
+            return [TextContent(type="text", text=result)]
+
+        elif name == "list_projects":
+            hub_id = arguments["hub_id"]
+
+            response = await aps_client.request(
+                "GET",
+                f"/project/v1/hubs/{hub_id}/projects"
+            )
+
+            projects = response.get("data", [])
+            result = f"Found {len(projects)} projects in hub '{hub_id}':\n\n"
+            for project in projects:
+                result += f"- {project['attributes']['name']}\n"
+                result += f"  ID: {project['id']}\n"
+                result += f"  Type: {project['type']}\n\n"
+
+            return [TextContent(type="text", text=result)]
+
+        elif name == "get_project_top_folders":
+            hub_id = arguments["hub_id"]
+            project_id = arguments["project_id"]
+
+            response = await aps_client.request(
+                "GET",
+                f"/project/v1/hubs/{hub_id}/projects/{project_id}/topFolders"
+            )
+
+            folders = response.get("data", [])
+            result = f"Found {len(folders)} top-level folders:\n\n"
+            for folder in folders:
+                result += f"- {folder['attributes']['name']}\n"
+                result += f"  ID: {folder['id']}\n"
+                result += f"  Type: {folder['type']}\n\n"
+
+            return [TextContent(type="text", text=result)]
+
+        elif name == "get_folder_contents":
+            project_id = arguments["project_id"]
+            folder_id = arguments["folder_id"]
+
+            response = await aps_client.request(
+                "GET",
+                f"/data/v1/projects/{project_id}/folders/{folder_id}/contents"
+            )
+
+            items = response.get("data", [])
+            result = f"Found {len(items)} items in folder:\n\n"
+
+            folders = [item for item in items if item["type"] == "folders"]
+            files = [item for item in items if item["type"] == "items"]
+
+            if folders:
+                result += "Folders:\n"
+                for folder in folders:
+                    result += f"- {folder['attributes']['displayName']}\n"
+                    result += f"  ID: {folder['id']}\n\n"
+
+            if files:
+                result += "Files:\n"
+                for file in files:
+                    result += f"- {file['attributes']['displayName']}\n"
+                    result += f"  ID: {file['id']}\n"
+                    result += f"  Extension: {file['attributes'].get('extension', {}).get('type', 'N/A')}\n"
+                    result += f"  Version: {file['attributes'].get('extension', {}).get('version', 'N/A')}\n\n"
+
+            return [TextContent(type="text", text=result)]
+
+        elif name == "get_item_versions":
+            project_id = arguments["project_id"]
+            item_id = arguments["item_id"]
+
+            response = await aps_client.request(
+                "GET",
+                f"/data/v1/projects/{project_id}/items/{item_id}/versions"
+            )
+
+            versions = response.get("data", [])
+            result = f"Found {len(versions)} versions:\n\n"
+            for version in versions:
+                result += f"- Version {version['attributes'].get('versionNumber', 'N/A')}\n"
+                result += f"  ID: {version['id']}\n"
+                result += f"  Display Name: {version['attributes']['displayName']}\n"
+                result += f"  Created: {version['attributes'].get('createTime', 'N/A')}\n"
+                result += f"  Created By: {version['attributes'].get('createUserName', 'N/A')}\n\n"
+
+            return [TextContent(type="text", text=result)]
+
+        elif name == "get_item_tip":
+            project_id = arguments["project_id"]
+            item_id = arguments["item_id"]
+
+            response = await aps_client.request(
+                "GET",
+                f"/data/v1/projects/{project_id}/items/{item_id}/tip"
+            )
+
+            version = response.get("data", {})
+            result = f"Latest Version:\n"
+            result += f"- Version Number: {version['attributes'].get('versionNumber', 'N/A')}\n"
+            result += f"- ID: {version['id']}\n"
+            result += f"- Display Name: {version['attributes']['displayName']}\n"
+            result += f"- Created: {version['attributes'].get('createTime', 'N/A')}\n"
+            result += f"- Created By: {version['attributes'].get('createUserName', 'N/A')}\n"
+            result += f"- File Type: {version['attributes'].get('fileType', 'N/A')}\n"
+            result += f"- Storage Size: {version['attributes'].get('storageSize', 0)} bytes\n"
+
+            # Include derivative URN if available
+            derivatives = version.get("relationships", {}).get("derivatives", {}).get("data", {})
+            if derivatives:
+                result += f"- Derivative URN: {derivatives.get('id', 'N/A')}\n"
 
             return [TextContent(type="text", text=result)]
 

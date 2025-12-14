@@ -4,15 +4,24 @@ MCP (Model Context Protocol) Server for Autodesk Platform Services (APS).
 
 ## 機能
 
-このMCPサーバーは、Autodesk Platform Services (旧 Forge) のData Management APIへのアクセスを提供します。
+このMCPサーバーは、Autodesk Platform Services (旧 Forge) のData Management APIとAEC Data Model APIへのアクセスを提供します。
 
 ### 提供するツール
 
+#### Data Management API
 - `list_buckets` - バケット一覧の取得
 - `create_bucket` - 新しいバケットの作成
 - `get_bucket_details` - バケット詳細情報の取得
 - `list_objects` - バケット内のオブジェクト一覧
 - `get_object_details` - オブジェクト詳細情報の取得
+
+#### AEC Data Model API
+- `list_hubs` - アクセス可能なハブ（アカウント）一覧の取得
+- `list_projects` - ハブ内のプロジェクト一覧の取得
+- `get_project_top_folders` - プロジェクトのトップレベルフォルダの取得
+- `get_folder_contents` - フォルダ内のコンテンツ（サブフォルダとファイル）の取得
+- `get_item_versions` - アイテムの全バージョン履歴の取得
+- `get_item_tip` - アイテムの最新バージョン情報の取得
 
 ## セットアップ
 
@@ -95,7 +104,9 @@ Claude Desktopの設定ファイル（`claude_desktop_config.json`）に以下�
 
 ## ツールの使用例
 
-### バケット一覧の取得
+### Data Management API
+
+#### バケット一覧の取得
 
 ```
 list_buckets
@@ -105,7 +116,7 @@ list_buckets
 - `region`: リージョン（"US" または "EMEA"）
 - `limit`: 取得する最大件数
 
-### バケットの作成
+#### バケットの作成
 
 ```
 create_bucket
@@ -115,7 +126,7 @@ create_bucket
 - `bucket_key`: バケット名（小文字、スペース不可）
 - `policy_key`: データ保持ポリシー（"transient", "temporary", "persistent"）
 
-### オブジェクト一覧の取得
+#### オブジェクト一覧の取得
 
 ```
 list_objects
@@ -124,6 +135,86 @@ list_objects
 パラメータ：
 - `bucket_key`: バケット名
 - `limit`: 取得する最大件数
+
+### AEC Data Model API
+
+#### ハブ一覧の取得
+
+```
+list_hubs
+```
+
+アクセス可能なすべてのハブ（BIM360、ACC等）を取得します。
+
+#### プロジェクト一覧の取得
+
+```
+list_projects
+```
+
+パラメータ：
+- `hub_id`: ハブID（例：`b.xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`）
+
+特定のハブ内のすべてのプロジェクトを取得します。
+
+#### プロジェクトのトップフォルダ取得
+
+```
+get_project_top_folders
+```
+
+パラメータ：
+- `hub_id`: ハブID
+- `project_id`: プロジェクトID（例：`b.xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`）
+
+プロジェクトのルートレベルにあるフォルダ（Plans、Project Files等）を取得します。
+
+#### フォルダコンテンツの取得
+
+```
+get_folder_contents
+```
+
+パラメータ：
+- `project_id`: プロジェクトID
+- `folder_id`: フォルダID（例：`urn:adsk.wipprod:fs.folder:co.xxxxxx`）
+
+指定したフォルダ内のサブフォルダとファイル一覧を取得します。
+
+#### アイテムバージョン履歴の取得
+
+```
+get_item_versions
+```
+
+パラメータ：
+- `project_id`: プロジェクトID
+- `item_id`: アイテムID（例：`urn:adsk.wipprod:dm.lineage:xxxxxx`）
+
+ファイルのすべてのバージョン履歴を取得します。
+
+#### アイテムの最新バージョン取得
+
+```
+get_item_tip
+```
+
+パラメータ：
+- `project_id`: プロジェクトID
+- `item_id`: アイテムID
+
+ファイルの最新バージョン情報を取得します。Derivative URN（Model Derivative APIで使用）も含まれます。
+
+## ワークフロー例
+
+### BIM360/ACCプロジェクトからモデルデータを取得
+
+1. `list_hubs` でハブ一覧を取得
+2. `list_projects` で特定ハブのプロジェクト一覧を取得
+3. `get_project_top_folders` でプロジェクトのトップフォルダを取得
+4. `get_folder_contents` でフォルダ内のファイルを探索
+5. `get_item_tip` で目的のファイルの最新バージョンとDerivative URNを取得
+6. Derivative URNを使用してModel Derivative APIでモデルデータを取得（将来実装予定）
 
 ## 開発
 
@@ -149,3 +240,5 @@ MIT
 - [APS Documentation](https://aps.autodesk.com/en/docs)
 - [MCP Documentation](https://modelcontextprotocol.io)
 - [Data Management API](https://aps.autodesk.com/en/docs/data/v2)
+- [AEC Data Model API](https://aps.autodesk.com/en/docs/bim360/v1/overview/)
+- [Model Derivative API](https://aps.autodesk.com/en/docs/model-derivative/v2)
