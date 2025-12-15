@@ -29,6 +29,19 @@ MCP (Model Context Protocol) Server for Autodesk Platform Services (APS).
 - `get_object_tree` - オブジェクトツリー（階層構造）の取得
 - `get_all_properties` - すべてのオブジェクトのプロパティ取得
 
+#### Index API (ElementGroups)
+- `get_index_fields` - プロジェクトで利用可能なインデックスフィールド一覧の取得
+- `query_index` - フィルタを使用したモデル要素のクエリ
+- `get_elements_by_category` - カテゴリ別の要素取得（壁、ドア、窓など）
+
+#### Issues API
+- `list_issues` - プロジェクト内のIssue（課題）一覧の取得
+- `get_issue_details` - Issue詳細情報の取得
+- `create_issue` - 新しいIssueの作成
+- `update_issue` - Issueの更新（ステータス変更など）
+- `get_issue_comments` - Issueのコメント一覧取得
+- `add_issue_comment` - Issueへのコメント追加
+
 ## セットアップ
 
 ### 1. APS認証情報の取得
@@ -259,6 +272,124 @@ get_all_properties
 
 すべてのオブジェクトのプロパティ（寸法、材質、位置等）を取得します。
 
+### Index API (ElementGroups)
+
+#### インデックスフィールドの取得
+
+```
+get_index_fields
+```
+
+パラメータ：
+- `project_id`: プロジェクトID（例：`b.xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`）
+
+プロジェクトで利用可能なすべてのインデックスフィールド（カテゴリ、ファミリ、タイプなど）を取得します。
+
+#### インデックスクエリ
+
+```
+query_index
+```
+
+パラメータ：
+- `project_id`: プロジェクトID
+- `version_urn`: バージョンURN（`get_item_tip`で取得）
+- `query`: クエリオブジェクト（例：`{"lmv.category": "Walls"}`）
+
+フィルタ条件を指定してモデル要素を検索します。
+
+#### カテゴリ別要素の取得
+
+```
+get_elements_by_category
+```
+
+パラメータ：
+- `project_id`: プロジェクトID
+- `version_urn`: バージョンURN
+- `category`: カテゴリ名（例：Walls、Doors、Windows、Floors、Roofs）
+
+特定のカテゴリに属する要素を一括取得します。壁、ドア、窓などの建築要素をフィルタリングできます。
+
+### Issues API
+
+#### Issue一覧の取得
+
+```
+list_issues
+```
+
+パラメータ：
+- `container_id`: コンテナID（プロジェクトIDから`b.`を除いたもの）
+- `filter`: フィルタオブジェクト（例：`{"status": "open"}`）
+
+プロジェクト内のすべてのIssue（課題）を取得します。
+
+#### Issue詳細の取得
+
+```
+get_issue_details
+```
+
+パラメータ：
+- `container_id`: コンテナID
+- `issue_id`: IssueID
+
+特定のIssueの詳細情報（説明、担当者、期限など）を取得します。
+
+#### Issueの作成
+
+```
+create_issue
+```
+
+パラメータ：
+- `container_id`: コンテナID
+- `title`: Issueタイトル
+- `description`: Issue説明
+- `issue_type_id`: IssueタイプID
+- `status`: ステータス（デフォルト：`open`）
+
+新しいIssueをプロジェクトに作成します。
+
+#### Issueの更新
+
+```
+update_issue
+```
+
+パラメータ：
+- `container_id`: コンテナID
+- `issue_id`: IssueID
+- `updates`: 更新内容（例：`{"status": "closed", "title": "新しいタイトル"}`）
+
+既存のIssueを更新します（ステータス変更、担当者変更など）。
+
+#### Issueコメントの取得
+
+```
+get_issue_comments
+```
+
+パラメータ：
+- `container_id`: コンテナID
+- `issue_id`: IssueID
+
+Issueに付けられたすべてのコメントを取得します。
+
+#### Issueコメントの追加
+
+```
+add_issue_comment
+```
+
+パラメータ：
+- `container_id`: コンテナID
+- `issue_id`: IssueID
+- `comment`: コメントテキスト
+
+Issueに新しいコメントを追加します。
+
 ## ワークフロー例
 
 ### BIM360/ACCプロジェクトからモデルの要素データを取得
@@ -276,6 +407,36 @@ get_all_properties
 9. `get_all_properties` ですべてのオブジェクトのプロパティ（寸法、材質等）を取得
 
 このワークフローで、BIM360/ACCプロジェクト内のRevitモデル等から、壁、柱、ドア等の要素データと詳細プロパティを取得できます。
+
+### Index APIを使用した効率的な要素データ取得
+
+Index APIを使用すると、より効率的に特定のカテゴリの要素データを取得できます：
+
+1. `list_hubs` でハブ一覧を取得
+2. `list_projects` で特定ハブのプロジェクト一覧を取得
+3. `get_project_top_folders` でプロジェクトのトップフォルダを取得
+4. `get_folder_contents` でフォルダ内のファイルを探索
+5. `get_item_tip` で目的のファイルの最新バージョンURNを取得
+6. `get_elements_by_category` で特定カテゴリ（壁、ドアなど）の要素を一括取得
+   - または `query_index` でカスタムフィルタを使用して要素を検索
+
+このワークフローは、Model Derivative APIより高速で、特定のカテゴリの要素のみが必要な場合に最適です。
+
+### Issuesの管理ワークフロー
+
+プロジェクトの課題管理：
+
+1. `list_issues` でプロジェクト内のすべてのIssueを取得
+2. `get_issue_details` で特定のIssue詳細を確認
+3. `get_issue_comments` でIssueのコメント履歴を確認
+4. `add_issue_comment` で返信を追加
+5. `update_issue` でIssueのステータスを更新（例：`{"status": "closed"}`）
+
+または新しいIssueを作成：
+
+1. `create_issue` で新しいIssueを作成
+2. `add_issue_comment` でコメントを追加
+3. `update_issue` で必要に応じてステータスや担当者を更新
 
 ## 開発
 
@@ -303,3 +464,5 @@ MIT
 - [Data Management API](https://aps.autodesk.com/en/docs/data/v2)
 - [AEC Data Model API](https://aps.autodesk.com/en/docs/bim360/v1/overview/)
 - [Model Derivative API](https://aps.autodesk.com/en/docs/model-derivative/v2)
+- [Index API](https://aps.autodesk.com/en/docs/acc/v1/tutorials/index/)
+- [Issues API](https://aps.autodesk.com/en/docs/bim360/v1/reference/http/issues-v1-issues-GET/)

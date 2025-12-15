@@ -256,6 +256,197 @@ async def list_tools() -> list[Tool]:
                 "required": ["project_id", "item_id"]
             }
         ),
+        # Index API Tools (ElementGroups)
+        Tool(
+            name="get_index_fields",
+            description="Get available fields for index queries in a project",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {
+                        "type": "string",
+                        "description": "Project ID (b.xxx format)"
+                    }
+                },
+                "required": ["project_id"]
+            }
+        ),
+        Tool(
+            name="query_index",
+            description="Query model elements using Index API with filtering",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {
+                        "type": "string",
+                        "description": "Project ID (b.xxx format)"
+                    },
+                    "version_urn": {
+                        "type": "string",
+                        "description": "Version URN from item tip"
+                    },
+                    "query": {
+                        "type": "object",
+                        "description": "Query object with filters (e.g., {'lmv.category': 'Walls'})",
+                        "default": {}
+                    }
+                },
+                "required": ["project_id", "version_urn"]
+            }
+        ),
+        Tool(
+            name="get_elements_by_category",
+            description="Get model elements filtered by category (Walls, Doors, Windows, etc.)",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_id": {
+                        "type": "string",
+                        "description": "Project ID (b.xxx format)"
+                    },
+                    "version_urn": {
+                        "type": "string",
+                        "description": "Version URN from item tip"
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": "Element category (e.g., Walls, Doors, Windows, Floors, Roofs)"
+                    }
+                },
+                "required": ["project_id", "version_urn", "category"]
+            }
+        ),
+        # Issues API Tools
+        Tool(
+            name="list_issues",
+            description="List all issues in a project container",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "container_id": {
+                        "type": "string",
+                        "description": "Container ID (project ID without 'b.' prefix)"
+                    },
+                    "filter": {
+                        "type": "object",
+                        "description": "Optional filters (e.g., {'status': 'open'})",
+                        "default": {}
+                    }
+                },
+                "required": ["container_id"]
+            }
+        ),
+        Tool(
+            name="get_issue_details",
+            description="Get details of a specific issue",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "container_id": {
+                        "type": "string",
+                        "description": "Container ID"
+                    },
+                    "issue_id": {
+                        "type": "string",
+                        "description": "Issue ID"
+                    }
+                },
+                "required": ["container_id", "issue_id"]
+            }
+        ),
+        Tool(
+            name="create_issue",
+            description="Create a new issue in the project",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "container_id": {
+                        "type": "string",
+                        "description": "Container ID"
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Issue title"
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Issue description"
+                    },
+                    "issue_type_id": {
+                        "type": "string",
+                        "description": "Issue type ID"
+                    },
+                    "status": {
+                        "type": "string",
+                        "description": "Issue status",
+                        "default": "open"
+                    }
+                },
+                "required": ["container_id", "title", "description", "issue_type_id"]
+            }
+        ),
+        Tool(
+            name="update_issue",
+            description="Update an existing issue",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "container_id": {
+                        "type": "string",
+                        "description": "Container ID"
+                    },
+                    "issue_id": {
+                        "type": "string",
+                        "description": "Issue ID"
+                    },
+                    "updates": {
+                        "type": "object",
+                        "description": "Fields to update (e.g., {'status': 'closed', 'title': 'New Title'})"
+                    }
+                },
+                "required": ["container_id", "issue_id", "updates"]
+            }
+        ),
+        Tool(
+            name="get_issue_comments",
+            description="Get all comments for an issue",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "container_id": {
+                        "type": "string",
+                        "description": "Container ID"
+                    },
+                    "issue_id": {
+                        "type": "string",
+                        "description": "Issue ID"
+                    }
+                },
+                "required": ["container_id", "issue_id"]
+            }
+        ),
+        Tool(
+            name="add_issue_comment",
+            description="Add a comment to an issue",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "container_id": {
+                        "type": "string",
+                        "description": "Container ID"
+                    },
+                    "issue_id": {
+                        "type": "string",
+                        "description": "Issue ID"
+                    },
+                    "comment": {
+                        "type": "string",
+                        "description": "Comment text"
+                    }
+                },
+                "required": ["container_id", "issue_id", "comment"]
+            }
+        ),
         # Model Derivative API Tools
         Tool(
             name="get_manifest",
@@ -551,6 +742,286 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             derivatives = version.get("relationships", {}).get("derivatives", {}).get("data", {})
             if derivatives:
                 result += f"- Derivative URN: {derivatives.get('id', 'N/A')}\n"
+
+            return [TextContent(type="text", text=result)]
+
+        # Index API handlers (ElementGroups)
+        elif name == "get_index_fields":
+            project_id = arguments["project_id"]
+
+            response = await aps_client.request(
+                "GET",
+                f"/construction/index/v2/projects/{project_id}/indexes:query",
+                params={"fields": ""}
+            )
+
+            fields = response.get("fields", [])
+            result = f"Found {len(fields)} index fields:\n\n"
+            for field in fields:
+                result += f"- {field.get('key', 'N/A')}\n"
+                result += f"  Type: {field.get('type', 'N/A')}\n"
+                result += f"  Description: {field.get('description', 'N/A')}\n\n"
+
+            return [TextContent(type="text", text=result)]
+
+        elif name == "query_index":
+            project_id = arguments["project_id"]
+            version_urn = arguments["version_urn"]
+            query = arguments.get("query", {})
+
+            # Build query payload
+            payload = {
+                "query": query,
+                "pagination": {
+                    "limit": 100
+                }
+            }
+
+            # Add version filter
+            if "versions.id" not in query:
+                payload["query"]["versions.id"] = version_urn
+
+            response = await aps_client.request(
+                "POST",
+                f"/construction/index/v2/projects/{project_id}/indexes:query",
+                json=payload
+            )
+
+            results = response.get("results", [])
+            result = f"Found {len(results)} elements:\n\n"
+
+            for item in results[:20]:  # Show first 20
+                properties = item.get("properties", {})
+                result += f"Element ID: {properties.get('id', 'N/A')}\n"
+                result += f"  Name: {properties.get('name', 'N/A')}\n"
+                result += f"  Category: {properties.get('lmv.category', 'N/A')}\n"
+                result += f"  Family: {properties.get('lmv.family', 'N/A')}\n"
+                result += f"  Type: {properties.get('lmv.type', 'N/A')}\n\n"
+
+            if len(results) > 20:
+                result += f"... and {len(results) - 20} more elements\n"
+
+            return [TextContent(type="text", text=result)]
+
+        elif name == "get_elements_by_category":
+            project_id = arguments["project_id"]
+            version_urn = arguments["version_urn"]
+            category = arguments["category"]
+
+            # Build query with category filter
+            payload = {
+                "query": {
+                    "versions.id": version_urn,
+                    "lmv.category": category
+                },
+                "pagination": {
+                    "limit": 100
+                }
+            }
+
+            response = await aps_client.request(
+                "POST",
+                f"/construction/index/v2/projects/{project_id}/indexes:query",
+                json=payload
+            )
+
+            results = response.get("results", [])
+            result = f"Found {len(results)} {category} elements:\n\n"
+
+            for item in results[:20]:  # Show first 20
+                properties = item.get("properties", {})
+                result += f"- {properties.get('name', 'N/A')}\n"
+                result += f"  ID: {properties.get('id', 'N/A')}\n"
+                result += f"  Family: {properties.get('lmv.family', 'N/A')}\n"
+                result += f"  Type: {properties.get('lmv.type', 'N/A')}\n"
+
+                # Show some common properties
+                if 'properties.Length' in properties:
+                    result += f"  Length: {properties['properties.Length']}\n"
+                if 'properties.Height' in properties:
+                    result += f"  Height: {properties['properties.Height']}\n"
+                if 'properties.Width' in properties:
+                    result += f"  Width: {properties['properties.Width']}\n"
+
+                result += "\n"
+
+            if len(results) > 20:
+                result += f"... and {len(results) - 20} more {category} elements\n"
+
+            return [TextContent(type="text", text=result)]
+
+        # Issues API handlers
+        elif name == "list_issues":
+            container_id = arguments["container_id"]
+            filters = arguments.get("filter", {})
+
+            # Build query parameters
+            params = {}
+            for key, value in filters.items():
+                params[f"filter[{key}]"] = value
+
+            response = await aps_client.request(
+                "GET",
+                f"/issues/v1/containers/{container_id}/issues",
+                params=params
+            )
+
+            issues = response.get("data", [])
+            result = f"Found {len(issues)} issues:\n\n"
+
+            for issue in issues:
+                attributes = issue.get("attributes", {})
+                result += f"- {attributes.get('title', 'N/A')}\n"
+                result += f"  ID: {issue.get('id', 'N/A')}\n"
+                result += f"  Status: {attributes.get('status', 'N/A')}\n"
+                result += f"  Type: {attributes.get('ng_issue_type_id', 'N/A')}\n"
+                result += f"  Created: {attributes.get('created_at', 'N/A')}\n"
+                result += f"  Updated: {attributes.get('updated_at', 'N/A')}\n\n"
+
+            return [TextContent(type="text", text=result)]
+
+        elif name == "get_issue_details":
+            container_id = arguments["container_id"]
+            issue_id = arguments["issue_id"]
+
+            response = await aps_client.request(
+                "GET",
+                f"/issues/v1/containers/{container_id}/issues/{issue_id}"
+            )
+
+            issue = response.get("data", {})
+            attributes = issue.get("attributes", {})
+
+            result = f"Issue Details:\n"
+            result += f"- Title: {attributes.get('title', 'N/A')}\n"
+            result += f"- ID: {issue.get('id', 'N/A')}\n"
+            result += f"- Status: {attributes.get('status', 'N/A')}\n"
+            result += f"- Type: {attributes.get('ng_issue_type_id', 'N/A')}\n"
+            result += f"- Description: {attributes.get('description', 'N/A')}\n"
+            result += f"- Created At: {attributes.get('created_at', 'N/A')}\n"
+            result += f"- Created By: {attributes.get('created_by', 'N/A')}\n"
+            result += f"- Updated At: {attributes.get('updated_at', 'N/A')}\n"
+            result += f"- Updated By: {attributes.get('updated_by', 'N/A')}\n"
+            result += f"- Assigned To: {attributes.get('assigned_to', 'N/A')}\n"
+            result += f"- Due Date: {attributes.get('due_date', 'N/A')}\n"
+            result += f"- Location: {attributes.get('location_description', 'N/A')}\n"
+
+            return [TextContent(type="text", text=result)]
+
+        elif name == "create_issue":
+            container_id = arguments["container_id"]
+            title = arguments["title"]
+            description = arguments["description"]
+            issue_type_id = arguments["issue_type_id"]
+            status = arguments.get("status", "open")
+
+            payload = {
+                "data": {
+                    "type": "issues",
+                    "attributes": {
+                        "title": title,
+                        "description": description,
+                        "status": status,
+                        "ng_issue_type_id": issue_type_id
+                    }
+                }
+            }
+
+            response = await aps_client.request(
+                "POST",
+                f"/issues/v1/containers/{container_id}/issues",
+                json=payload
+            )
+
+            issue = response.get("data", {})
+            attributes = issue.get("attributes", {})
+
+            result = f"Issue created successfully:\n"
+            result += f"- ID: {issue.get('id', 'N/A')}\n"
+            result += f"- Title: {attributes.get('title', 'N/A')}\n"
+            result += f"- Status: {attributes.get('status', 'N/A')}\n"
+            result += f"- Created At: {attributes.get('created_at', 'N/A')}\n"
+
+            return [TextContent(type="text", text=result)]
+
+        elif name == "update_issue":
+            container_id = arguments["container_id"]
+            issue_id = arguments["issue_id"]
+            updates = arguments["updates"]
+
+            payload = {
+                "data": {
+                    "type": "issues",
+                    "id": issue_id,
+                    "attributes": updates
+                }
+            }
+
+            response = await aps_client.request(
+                "PATCH",
+                f"/issues/v1/containers/{container_id}/issues/{issue_id}",
+                json=payload
+            )
+
+            issue = response.get("data", {})
+            attributes = issue.get("attributes", {})
+
+            result = f"Issue updated successfully:\n"
+            result += f"- ID: {issue.get('id', 'N/A')}\n"
+            result += f"- Title: {attributes.get('title', 'N/A')}\n"
+            result += f"- Status: {attributes.get('status', 'N/A')}\n"
+            result += f"- Updated At: {attributes.get('updated_at', 'N/A')}\n"
+
+            return [TextContent(type="text", text=result)]
+
+        elif name == "get_issue_comments":
+            container_id = arguments["container_id"]
+            issue_id = arguments["issue_id"]
+
+            response = await aps_client.request(
+                "GET",
+                f"/issues/v1/containers/{container_id}/issues/{issue_id}/comments"
+            )
+
+            comments = response.get("data", [])
+            result = f"Found {len(comments)} comments:\n\n"
+
+            for comment in comments:
+                attributes = comment.get("attributes", {})
+                result += f"- Comment ID: {comment.get('id', 'N/A')}\n"
+                result += f"  Body: {attributes.get('body', 'N/A')}\n"
+                result += f"  Created At: {attributes.get('created_at', 'N/A')}\n"
+                result += f"  Created By: {attributes.get('created_by', 'N/A')}\n\n"
+
+            return [TextContent(type="text", text=result)]
+
+        elif name == "add_issue_comment":
+            container_id = arguments["container_id"]
+            issue_id = arguments["issue_id"]
+            comment_text = arguments["comment"]
+
+            payload = {
+                "data": {
+                    "type": "comments",
+                    "attributes": {
+                        "body": comment_text
+                    }
+                }
+            }
+
+            response = await aps_client.request(
+                "POST",
+                f"/issues/v1/containers/{container_id}/issues/{issue_id}/comments",
+                json=payload
+            )
+
+            comment = response.get("data", {})
+            attributes = comment.get("attributes", {})
+
+            result = f"Comment added successfully:\n"
+            result += f"- ID: {comment.get('id', 'N/A')}\n"
+            result += f"- Body: {attributes.get('body', 'N/A')}\n"
+            result += f"- Created At: {attributes.get('created_at', 'N/A')}\n"
 
             return [TextContent(type="text", text=result)]
 

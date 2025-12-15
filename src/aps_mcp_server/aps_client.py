@@ -40,14 +40,14 @@ class APSClient:
             return self.access_token
 
         # Request new token using 2-legged OAuth
-        # Scopes for Data Management + AEC Data Model APIs
+        # Scopes for Data Management + AEC Data Model + Issues + Index APIs
         response = await self.http_client.post(
             self.AUTH_URL,
             data={
                 "grant_type": "client_credentials",
                 "client_id": self.client_id,
                 "client_secret": self.client_secret,
-                "scope": "data:read data:write bucket:read bucket:create account:read"
+                "scope": "data:read data:write bucket:read bucket:create account:read account:write viewables:read"
             },
             headers={
                 "Content-Type": "application/x-www-form-urlencoded"
