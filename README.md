@@ -29,9 +29,9 @@ MCP (Model Context Protocol) Server for Autodesk Platform Services (APS).
 - `get_object_tree` - オブジェクトツリー（階層構造）の取得
 - `get_all_properties` - すべてのオブジェクトのプロパティ取得
 
-#### Index API (ElementGroups)
-- `get_index_fields` - プロジェクトで利用可能なインデックスフィールド一覧の取得
-- `query_index` - フィルタを使用したモデル要素のクエリ
+#### AEC Data Model API (GraphQL - ElementGroups)
+- `get_element_groups` - プロジェクト内のElementGroups（モデル）一覧の取得
+- `get_elements` - ElementGroup内の要素一覧の取得
 - `get_elements_by_category` - カテゴリ別の要素取得（壁、ドア、窓など）
 
 #### Issues API
@@ -272,31 +272,30 @@ get_all_properties
 
 すべてのオブジェクトのプロパティ（寸法、材質、位置等）を取得します。
 
-### Index API (ElementGroups)
+### AEC Data Model API (GraphQL - ElementGroups)
 
-#### インデックスフィールドの取得
+#### ElementGroups一覧の取得
 
 ```
-get_index_fields
+get_element_groups
 ```
 
 パラメータ：
 - `project_id`: プロジェクトID（例：`b.xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`）
 
-プロジェクトで利用可能なすべてのインデックスフィールド（カテゴリ、ファミリ、タイプなど）を取得します。
+プロジェクト内のElementGroups（Revit 2024+でアップロードされたモデル）の一覧を取得します。
 
-#### インデックスクエリ
+#### 要素一覧の取得
 
 ```
-query_index
+get_elements
 ```
 
 パラメータ：
-- `project_id`: プロジェクトID
-- `version_urn`: バージョンURN（`get_item_tip`で取得）
-- `query`: クエリオブジェクト（例：`{"lmv.category": "Walls"}`）
+- `element_group_id`: ElementGroup ID（`get_element_groups`で取得）
+- `limit`: 取得する最大件数（最大500、デフォルト100）
 
-フィルタ条件を指定してモデル要素を検索します。
+ElementGroup内のすべての要素（壁、ドア、窓など）を取得します。
 
 #### カテゴリ別要素の取得
 
@@ -305,9 +304,9 @@ get_elements_by_category
 ```
 
 パラメータ：
-- `project_id`: プロジェクトID
-- `version_urn`: バージョンURN
+- `element_group_id`: ElementGroup ID
 - `category`: カテゴリ名（例：Walls、Doors、Windows、Floors、Roofs）
+- `limit`: 取得する最大件数（最大500、デフォルト100）
 
 特定のカテゴリに属する要素を一括取得します。壁、ドア、窓などの建築要素をフィルタリングできます。
 
@@ -408,19 +407,17 @@ Issueに新しいコメントを追加します。
 
 このワークフローで、BIM360/ACCプロジェクト内のRevitモデル等から、壁、柱、ドア等の要素データと詳細プロパティを取得できます。
 
-### Index APIを使用した効率的な要素データ取得
+### AEC Data Model API (GraphQL)を使用した要素データ取得
 
-Index APIを使用すると、より効率的に特定のカテゴリの要素データを取得できます：
+AEC Data Model APIを使用すると、GraphQLで効率的にモデル要素データを取得できます：
 
 1. `list_hubs` でハブ一覧を取得
 2. `list_projects` で特定ハブのプロジェクト一覧を取得
-3. `get_project_top_folders` でプロジェクトのトップフォルダを取得
-4. `get_folder_contents` でフォルダ内のファイルを探索
-5. `get_item_tip` で目的のファイルの最新バージョンURNを取得
-6. `get_elements_by_category` で特定カテゴリ（壁、ドアなど）の要素を一括取得
-   - または `query_index` でカスタムフィルタを使用して要素を検索
+3. `get_element_groups` でプロジェクト内のElementGroups（モデル）一覧を取得
+4. `get_elements` でElementGroup内の全要素を取得
+   - または `get_elements_by_category` で特定カテゴリ（壁、ドアなど）の要素のみを取得
 
-このワークフローは、Model Derivative APIより高速で、特定のカテゴリの要素のみが必要な場合に最適です。
+このワークフローは、Revit 2024+でアップロードされたモデルから直接要素データを取得できます。GraphQLを使用しているため、必要なデータのみを効率的に取得できます。
 
 ### Issuesの管理ワークフロー
 
@@ -462,7 +459,8 @@ MIT
 - [APS Documentation](https://aps.autodesk.com/en/docs)
 - [MCP Documentation](https://modelcontextprotocol.io)
 - [Data Management API](https://aps.autodesk.com/en/docs/data/v2)
-- [AEC Data Model API](https://aps.autodesk.com/en/docs/bim360/v1/overview/)
+- [AEC Data Model API](https://aps.autodesk.com/en/docs/aecdatamodel/v1/developers_guide/overview/)
+- [AEC Data Model API - GraphQL Endpoint](https://aps.autodesk.com/en/docs/aecdatamodel/v1/reference/graphqlendpoint/)
+- [AEC Data Model API Tutorial](https://autodesk-platform-services.github.io/aps-aecdm-tutorial/)
 - [Model Derivative API](https://aps.autodesk.com/en/docs/model-derivative/v2)
-- [Index API](https://aps.autodesk.com/en/docs/acc/v1/tutorials/index/)
 - [Issues API](https://aps.autodesk.com/en/docs/bim360/v1/reference/http/issues-v1-issues-GET/)

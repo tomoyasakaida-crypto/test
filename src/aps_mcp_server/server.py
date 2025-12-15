@@ -256,10 +256,10 @@ async def list_tools() -> list[Tool]:
                 "required": ["project_id", "item_id"]
             }
         ),
-        # Index API Tools (ElementGroups)
+        # AEC Data Model API Tools (GraphQL - ElementGroups)
         Tool(
-            name="get_index_fields",
-            description="Get available fields for index queries in a project",
+            name="get_element_groups",
+            description="Get ElementGroups (models) in a project using AEC Data Model API",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -272,48 +272,45 @@ async def list_tools() -> list[Tool]:
             }
         ),
         Tool(
-            name="query_index",
-            description="Query model elements using Index API with filtering",
+            name="get_elements",
+            description="Get elements from an ElementGroup using AEC Data Model API",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "project_id": {
+                    "element_group_id": {
                         "type": "string",
-                        "description": "Project ID (b.xxx format)"
+                        "description": "ElementGroup ID from get_element_groups"
                     },
-                    "version_urn": {
-                        "type": "string",
-                        "description": "Version URN from item tip"
-                    },
-                    "query": {
-                        "type": "object",
-                        "description": "Query object with filters (e.g., {'lmv.category': 'Walls'})",
-                        "default": {}
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of elements to return (max 500)",
+                        "default": 100
                     }
                 },
-                "required": ["project_id", "version_urn"]
+                "required": ["element_group_id"]
             }
         ),
         Tool(
             name="get_elements_by_category",
-            description="Get model elements filtered by category (Walls, Doors, Windows, etc.)",
+            description="Get model elements filtered by category (Walls, Doors, Windows, etc.) using AEC Data Model API",
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "project_id": {
+                    "element_group_id": {
                         "type": "string",
-                        "description": "Project ID (b.xxx format)"
-                    },
-                    "version_urn": {
-                        "type": "string",
-                        "description": "Version URN from item tip"
+                        "description": "ElementGroup ID from get_element_groups"
                     },
                     "category": {
                         "type": "string",
                         "description": "Element category (e.g., Walls, Doors, Windows, Floors, Roofs)"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of elements to return (max 500)",
+                        "default": 100
                     }
                 },
-                "required": ["project_id", "version_urn", "category"]
+                "required": ["element_group_id", "category"]
             }
         ),
         # Issues API Tools
@@ -745,108 +742,178 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
 
             return [TextContent(type="text", text=result)]
 
-        # Index API handlers (ElementGroups)
-        elif name == "get_index_fields":
+        # AEC Data Model API handlers (GraphQL - ElementGroups)
+        elif name == "get_element_groups":
             project_id = arguments["project_id"]
 
-            response = await aps_client.request(
-                "GET",
-                f"/construction/index/v2/projects/{project_id}/indexes:query",
-                params={"fields": ""}
+            # GraphQL query to get ElementGroups
+            query = """
+            query GetElementGroupsByProject($projectId: ID!) {
+                elementGroupsByProject(projectId: $projectId) {
+                    pagination {
+                        cursor
+                    }
+                    results {
+                        id
+                        name
+                        alternativeIdentifiers {
+                            fileUrn
+                            fileVersionUrn
+                        }
+                    }
+                }
+            }
+            """
+
+            response = await aps_client.graphql_request(
+                query=query,
+                variables={"projectId": project_id}
             )
 
-            fields = response.get("fields", [])
-            result = f"Found {len(fields)} index fields:\n\n"
-            for field in fields:
-                result += f"- {field.get('key', 'N/A')}\n"
-                result += f"  Type: {field.get('type', 'N/A')}\n"
-                result += f"  Description: {field.get('description', 'N/A')}\n\n"
+            data = response.get("data", {}).get("elementGroupsByProject", {})
+            element_groups = data.get("results", [])
+
+            result = f"Found {len(element_groups)} ElementGroups:\n\n"
+            for eg in element_groups:
+                result += f"- {eg.get('name', 'N/A')}\n"
+                result += f"  ID: {eg.get('id', 'N/A')}\n"
+                alt_ids = eg.get("alternativeIdentifiers", {})
+                if alt_ids:
+                    result += f"  File URN: {alt_ids.get('fileUrn', 'N/A')}\n"
+                    result += f"  Version URN: {alt_ids.get('fileVersionUrn', 'N/A')}\n"
+                result += "\n"
 
             return [TextContent(type="text", text=result)]
 
-        elif name == "query_index":
-            project_id = arguments["project_id"]
-            version_urn = arguments["version_urn"]
-            query = arguments.get("query", {})
+        elif name == "get_elements":
+            element_group_id = arguments["element_group_id"]
+            limit = arguments.get("limit", 100)
 
-            # Build query payload
-            payload = {
-                "query": query,
-                "pagination": {
-                    "limit": 100
+            # GraphQL query to get elements
+            query = """
+            query GetElements($elementGroupId: ID!, $limit: Int!) {
+                elementsByElementGroup(elementGroupId: $elementGroupId, pagination: {limit: $limit}) {
+                    pagination {
+                        cursor
+                    }
+                    results {
+                        id
+                        name
+                        properties {
+                            results {
+                                name
+                                value
+                                definition {
+                                    units {
+                                        name
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
+            """
 
-            # Add version filter
-            if "versions.id" not in query:
-                payload["query"]["versions.id"] = version_urn
-
-            response = await aps_client.request(
-                "POST",
-                f"/construction/index/v2/projects/{project_id}/indexes:query",
-                json=payload
+            response = await aps_client.graphql_request(
+                query=query,
+                variables={"elementGroupId": element_group_id, "limit": limit}
             )
 
-            results = response.get("results", [])
-            result = f"Found {len(results)} elements:\n\n"
+            data = response.get("data", {}).get("elementsByElementGroup", {})
+            elements = data.get("results", [])
 
-            for item in results[:20]:  # Show first 20
-                properties = item.get("properties", {})
-                result += f"Element ID: {properties.get('id', 'N/A')}\n"
-                result += f"  Name: {properties.get('name', 'N/A')}\n"
-                result += f"  Category: {properties.get('lmv.category', 'N/A')}\n"
-                result += f"  Family: {properties.get('lmv.family', 'N/A')}\n"
-                result += f"  Type: {properties.get('lmv.type', 'N/A')}\n\n"
+            result = f"Found {len(elements)} elements:\n\n"
+            for elem in elements[:20]:  # Show first 20
+                result += f"- {elem.get('name', 'N/A')}\n"
+                result += f"  ID: {elem.get('id', 'N/A')}\n"
 
-            if len(results) > 20:
-                result += f"... and {len(results) - 20} more elements\n"
+                # Show some key properties
+                props = elem.get("properties", {}).get("results", [])
+                for prop in props[:5]:  # Show first 5 properties
+                    prop_name = prop.get("name", "N/A")
+                    prop_value = prop.get("value", "N/A")
+                    units = prop.get("definition", {}).get("units", {})
+                    unit_name = units.get("name", "") if units else ""
+                    result += f"  {prop_name}: {prop_value} {unit_name}\n".strip() + "\n"
+
+                result += "\n"
+
+            if len(elements) > 20:
+                result += f"... and {len(elements) - 20} more elements\n"
 
             return [TextContent(type="text", text=result)]
 
         elif name == "get_elements_by_category":
-            project_id = arguments["project_id"]
-            version_urn = arguments["version_urn"]
+            element_group_id = arguments["element_group_id"]
             category = arguments["category"]
+            limit = arguments.get("limit", 100)
 
-            # Build query with category filter
-            payload = {
-                "query": {
-                    "versions.id": version_urn,
-                    "lmv.category": category
-                },
-                "pagination": {
-                    "limit": 100
+            # GraphQL query with category filter
+            query = """
+            query GetElementsByCategory($elementGroupId: ID!, $propertyFilter: String!, $limit: Int!) {
+                elementsByElementGroup(
+                    elementGroupId: $elementGroupId,
+                    filter: {query: $propertyFilter},
+                    pagination: {limit: $limit}
+                ) {
+                    pagination {
+                        cursor
+                    }
+                    results {
+                        id
+                        name
+                        properties {
+                            results {
+                                name
+                                value
+                                definition {
+                                    units {
+                                        name
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
+            """
 
-            response = await aps_client.request(
-                "POST",
-                f"/construction/index/v2/projects/{project_id}/indexes:query",
-                json=payload
+            # Build property filter for category
+            property_filter = f"property.name.category=={category}"
+
+            response = await aps_client.graphql_request(
+                query=query,
+                variables={
+                    "elementGroupId": element_group_id,
+                    "propertyFilter": property_filter,
+                    "limit": limit
+                }
             )
 
-            results = response.get("results", [])
-            result = f"Found {len(results)} {category} elements:\n\n"
+            data = response.get("data", {}).get("elementsByElementGroup", {})
+            elements = data.get("results", [])
 
-            for item in results[:20]:  # Show first 20
-                properties = item.get("properties", {})
-                result += f"- {properties.get('name', 'N/A')}\n"
-                result += f"  ID: {properties.get('id', 'N/A')}\n"
-                result += f"  Family: {properties.get('lmv.family', 'N/A')}\n"
-                result += f"  Type: {properties.get('lmv.type', 'N/A')}\n"
+            result = f"Found {len(elements)} {category} elements:\n\n"
+            for elem in elements[:20]:  # Show first 20
+                result += f"- {elem.get('name', 'N/A')}\n"
+                result += f"  ID: {elem.get('id', 'N/A')}\n"
 
-                # Show some common properties
-                if 'properties.Length' in properties:
-                    result += f"  Length: {properties['properties.Length']}\n"
-                if 'properties.Height' in properties:
-                    result += f"  Height: {properties['properties.Height']}\n"
-                if 'properties.Width' in properties:
-                    result += f"  Width: {properties['properties.Width']}\n"
+                # Show key properties
+                props = elem.get("properties", {}).get("results", [])
+                for prop in props:
+                    prop_name = prop.get("name", "")
+                    # Show common dimension properties
+                    if prop_name in ["Length", "Height", "Width", "Area", "Volume"]:
+                        prop_value = prop.get("value", "N/A")
+                        units = prop.get("definition", {}).get("units", {})
+                        unit_name = units.get("name", "") if units else ""
+                        result += f"  {prop_name}: {prop_value} {unit_name}\n".strip() + "\n"
 
                 result += "\n"
 
-            if len(results) > 20:
-                result += f"... and {len(results) - 20} more {category} elements\n"
+            if len(elements) > 20:
+                result += f"... and {len(elements) - 20} more {category} elements\n"
 
             return [TextContent(type="text", text=result)]
 

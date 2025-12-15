@@ -89,6 +89,39 @@ class APSClient:
 
         return response.json()
 
+    async def graphql_request(self, query: str, variables: dict = None, region: str = "US") -> dict:
+        """
+        Make GraphQL request to AEC Data Model API.
+
+        Args:
+            query: GraphQL query string
+            variables: GraphQL query variables
+            region: Region (US, EMEA, etc.)
+
+        Returns:
+            GraphQL response data
+        """
+        token = await self.get_access_token()
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Region": region
+        }
+
+        payload = {"query": query}
+        if variables:
+            payload["variables"] = variables
+
+        response = await self.http_client.post(
+            "https://developer.api.autodesk.com/aec/graphql",
+            headers=headers,
+            json=payload
+        )
+        response.raise_for_status()
+
+        return response.json()
+
     async def close(self):
         """Close the HTTP client."""
         await self.http_client.aclose()
