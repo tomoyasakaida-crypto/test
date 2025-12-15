@@ -770,7 +770,20 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                 variables={"projectId": project_id}
             )
 
+            # Check for GraphQL errors
+            if "errors" in response:
+                errors = response["errors"]
+                error_messages = "\n".join([f"- {err.get('message', 'Unknown error')}" for err in errors])
+                return [TextContent(type="text", text=f"GraphQL Error:\n{error_messages}\n\nNote: AEC Data Model API may require 3-legged OAuth (user authentication) instead of 2-legged OAuth. Please check the authentication requirements.")]
+
+            # Check if data exists
+            if not response.get("data"):
+                return [TextContent(type="text", text=f"No data returned from GraphQL query. Response: {response}")]
+
             data = response.get("data", {}).get("elementGroupsByProject", {})
+            if not data:
+                return [TextContent(type="text", text=f"No elementGroupsByProject data found. Response data: {response.get('data')}")]
+
             element_groups = data.get("results", [])
 
             result = f"Found {len(element_groups)} ElementGroups:\n\n"
@@ -820,7 +833,19 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                 variables={"elementGroupId": element_group_id, "limit": limit}
             )
 
+            # Check for GraphQL errors
+            if "errors" in response:
+                errors = response["errors"]
+                error_messages = "\n".join([f"- {err.get('message', 'Unknown error')}" for err in errors])
+                return [TextContent(type="text", text=f"GraphQL Error:\n{error_messages}")]
+
+            if not response.get("data"):
+                return [TextContent(type="text", text=f"No data returned from GraphQL query. Response: {response}")]
+
             data = response.get("data", {}).get("elementsByElementGroup", {})
+            if not data:
+                return [TextContent(type="text", text=f"No elementsByElementGroup data found. Response data: {response.get('data')}")]
+
             elements = data.get("results", [])
 
             result = f"Found {len(elements)} elements:\n\n"
@@ -891,7 +916,19 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                 }
             )
 
+            # Check for GraphQL errors
+            if "errors" in response:
+                errors = response["errors"]
+                error_messages = "\n".join([f"- {err.get('message', 'Unknown error')}" for err in errors])
+                return [TextContent(type="text", text=f"GraphQL Error:\n{error_messages}")]
+
+            if not response.get("data"):
+                return [TextContent(type="text", text=f"No data returned from GraphQL query. Response: {response}")]
+
             data = response.get("data", {}).get("elementsByElementGroup", {})
+            if not data:
+                return [TextContent(type="text", text=f"No elementsByElementGroup data found. Response data: {response.get('data')}")]
+
             elements = data.get("results", [])
 
             result = f"Found {len(elements)} {category} elements:\n\n"
