@@ -40,8 +40,6 @@ def get_token_file_path() -> Path:
     # Fallback to current directory
     return current_dir / ".aps_token.json"
 
-TOKEN_FILE = str(get_token_file_path())
-
 # Scopes for AEC Data Model API (GraphQL)
 SCOPES = [
     "data:read",
@@ -147,7 +145,7 @@ def save_token(token_data: dict):
     Args:
         token_data: Token response from OAuth
     """
-    token_path = Path(TOKEN_FILE)
+    token_path = get_token_file_path()
     with open(token_path, "w") as f:
         json.dump(token_data, f, indent=2)
     print(f"\nToken saved to: {token_path.absolute()}")

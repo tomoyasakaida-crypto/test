@@ -15,8 +15,7 @@ class APSClient:
     BASE_URL = "https://developer.api.autodesk.com"
     AUTH_URL = f"{BASE_URL}/authentication/v2/token"
 
-    @staticmethod
-    def _get_token_file_path() -> Path:
+    def _get_token_file_path(self) -> Path:
         """Get absolute path to token file in project root."""
         # Try to find .env file location (project root)
         current_dir = Path.cwd()
@@ -31,8 +30,6 @@ class APSClient:
 
         # Fallback to current directory
         return current_dir / ".aps_token.json"
-
-    TOKEN_FILE = str(_get_token_file_path.__func__())
 
     def __init__(self, client_id: str, client_secret: str, use_3legged: bool = True):
         """
@@ -51,13 +48,16 @@ class APSClient:
         self.token_expires_at: float = 0
         self.http_client = httpx.AsyncClient()
 
+        # Get token file path (evaluated at instance creation, not class load time)
+        self.token_file_path = self._get_token_file_path()
+
         # Load 3-legged token if available
         if use_3legged:
             self._load_3legged_token()
 
     def _load_3legged_token(self):
         """Load 3-legged OAuth token from file."""
-        token_path = Path(self.TOKEN_FILE)
+        token_path = self.token_file_path
         print(f"Looking for token at: {token_path.absolute()}")
         if token_path.exists():
             try:
@@ -84,7 +84,7 @@ class APSClient:
             token_data: Token response from OAuth
         """
         try:
-            with open(self.TOKEN_FILE, "w") as f:
+            with open(self.token_file_path, "w") as f:
                 json.dump(token_data, f, indent=2)
         except Exception as e:
             print(f"Error saving token file: {e}")
