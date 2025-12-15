@@ -28,6 +28,9 @@ ENV/
 # Environment variables
 .env
 
+# APS OAuth tokens
+.aps_token.json
+
 # IDE
 .vscode/
 .idea/

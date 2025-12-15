@@ -2,7 +2,10 @@
 
 import asyncio
 import time
+import json
+import os
 from typing import Optional
+from pathlib import Path
 import httpx
 
 
@@ -11,20 +14,58 @@ class APSClient:
 
     BASE_URL = "https://developer.api.autodesk.com"
     AUTH_URL = f"{BASE_URL}/authentication/v2/token"
+    TOKEN_FILE = ".aps_token.json"
 
-    def __init__(self, client_id: str, client_secret: str):
+    def __init__(self, client_id: str, client_secret: str, use_3legged: bool = True):
         """
         Initialize APS client.
 
         Args:
             client_id: APS application client ID
             client_secret: APS application client secret
+            use_3legged: Use 3-legged OAuth if True, 2-legged if False
         """
         self.client_id = client_id
         self.client_secret = client_secret
+        self.use_3legged = use_3legged
         self.access_token: Optional[str] = None
+        self.refresh_token: Optional[str] = None
         self.token_expires_at: float = 0
         self.http_client = httpx.AsyncClient()
+
+        # Load 3-legged token if available
+        if use_3legged:
+            self._load_3legged_token()
+
+    def _load_3legged_token(self):
+        """Load 3-legged OAuth token from file."""
+        token_path = Path(self.TOKEN_FILE)
+        if token_path.exists():
+            try:
+                with open(token_path, "r") as f:
+                    token_data = json.load(f)
+                    self.access_token = token_data.get("access_token")
+                    self.refresh_token = token_data.get("refresh_token")
+                    # Calculate expiration time
+                    expires_in = token_data.get("expires_in", 3600)
+                    self.token_expires_at = time.time() + expires_in
+                    print(f"Loaded 3-legged OAuth token from {self.TOKEN_FILE}")
+            except Exception as e:
+                print(f"Error loading token file: {e}")
+                print("Please run auth.py to authenticate")
+
+    def _save_3legged_token(self, token_data: dict):
+        """
+        Save 3-legged OAuth token to file.
+
+        Args:
+            token_data: Token response from OAuth
+        """
+        try:
+            with open(self.TOKEN_FILE, "w") as f:
+                json.dump(token_data, f, indent=2)
+        except Exception as e:
+            print(f"Error saving token file: {e}")
 
     async def get_access_token(self) -> str:
         """
@@ -39,8 +80,21 @@ class APSClient:
         if self.access_token and current_time < (self.token_expires_at - 60):
             return self.access_token
 
+        # Use 3-legged or 2-legged OAuth
+        if self.use_3legged:
+            return await self._refresh_3legged_token()
+        else:
+            return await self._get_2legged_token()
+
+    async def _get_2legged_token(self) -> str:
+        """
+        Get 2-legged OAuth token (client credentials).
+
+        Returns:
+            Access token
+        """
         # Request new token using 2-legged OAuth
-        # Scopes for Data Management + AEC Data Model + Issues + Index APIs
+        # Scopes for Data Management + AEC Data Model + Issues APIs
         response = await self.http_client.post(
             self.AUTH_URL,
             data={
@@ -57,7 +111,44 @@ class APSClient:
 
         token_data = response.json()
         self.access_token = token_data["access_token"]
-        self.token_expires_at = current_time + token_data["expires_in"]
+        self.token_expires_at = time.time() + token_data["expires_in"]
+
+        return self.access_token
+
+    async def _refresh_3legged_token(self) -> str:
+        """
+        Refresh 3-legged OAuth token using refresh token.
+
+        Returns:
+            Access token
+        """
+        if not self.refresh_token:
+            raise ValueError(
+                "No refresh token available. Please run auth.py to authenticate."
+            )
+
+        # Refresh token
+        response = await self.http_client.post(
+            self.AUTH_URL,
+            data={
+                "grant_type": "refresh_token",
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "refresh_token": self.refresh_token
+            },
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded"
+            }
+        )
+        response.raise_for_status()
+
+        token_data = response.json()
+        self.access_token = token_data["access_token"]
+        self.refresh_token = token_data.get("refresh_token", self.refresh_token)
+        self.token_expires_at = time.time() + token_data["expires_in"]
+
+        # Save updated token
+        self._save_3legged_token(token_data)
 
         return self.access_token
 

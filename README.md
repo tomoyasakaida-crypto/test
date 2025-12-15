@@ -49,6 +49,7 @@ MCP (Model Context Protocol) Server for Autodesk Platform Services (APS).
 1. [APS Developer Portal](https://aps.autodesk.com/myapps) にアクセス
 2. 新しいアプリケーションを作成、または既存のアプリを使用
 3. Client IDとClient Secretを取得
+4. **重要**: Callback URL に `http://localhost:8080/callback` を追加（3-legged OAuth用）
 
 ### 2. 環境変数の設定
 
@@ -74,6 +75,40 @@ pip install -r requirements.txt
 ```bash
 pip install -e .
 ```
+
+### 4. 3-legged OAuth認証（AEC Data Model API用）
+
+AEC Data Model APIを使用するには、3-legged OAuth（ユーザー認証）が必要です。
+
+#### 認証手順
+
+1. **認証スクリプトを実行**:
+```bash
+python auth.py
+```
+
+2. **ブラウザで認証**:
+   - ブラウザが自動的に開きます
+   - Autodeskアカウントでログイン
+   - アプリケーションへのアクセスを許可
+
+3. **トークンが自動保存**:
+   - 認証が成功すると `.aps_token.json` にトークンが保存されます
+   - このファイルは自動的に更新されます（リフレッシュトークンを使用）
+
+4. **Claude Desktopを再起動**:
+   - 認証後、Claude Desktopを再起動してください
+
+#### トラブルシューティング
+
+- **ブラウザが開かない場合**:
+  - 表示されたURLを手動でブラウザにコピー＆ペースト
+
+- **"No refresh token available" エラー**:
+  - `python auth.py` を再実行して認証をやり直してください
+
+- **トークンの有効期限切れ**:
+  - 自動的にリフレッシュされますが、問題がある場合は再認証してください
 
 ## 使用方法
 
