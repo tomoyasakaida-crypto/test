@@ -12,6 +12,7 @@ import json
 import webbrowser
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
+from pathlib import Path
 from dotenv import load_dotenv
 import httpx
 
@@ -22,7 +23,24 @@ load_dotenv()
 CLIENT_ID = os.getenv("APS_CLIENT_ID")
 CLIENT_SECRET = os.getenv("APS_CLIENT_SECRET")
 REDIRECT_URI = "http://localhost:8080/callback"
-TOKEN_FILE = ".aps_token.json"
+
+def get_token_file_path() -> Path:
+    """Get absolute path to token file in project root."""
+    # Try to find .env file location (project root)
+    current_dir = Path.cwd()
+
+    # Search up the directory tree for .env file
+    search_dir = current_dir
+    for _ in range(5):  # Search up to 5 levels
+        env_file = search_dir / ".env"
+        if env_file.exists():
+            return search_dir / ".aps_token.json"
+        search_dir = search_dir.parent
+
+    # Fallback to current directory
+    return current_dir / ".aps_token.json"
+
+TOKEN_FILE = str(get_token_file_path())
 
 # Scopes for AEC Data Model API (GraphQL)
 SCOPES = [
@@ -129,9 +147,10 @@ def save_token(token_data: dict):
     Args:
         token_data: Token response from OAuth
     """
-    with open(TOKEN_FILE, "w") as f:
+    token_path = Path(TOKEN_FILE)
+    with open(token_path, "w") as f:
         json.dump(token_data, f, indent=2)
-    print(f"\nToken saved to {TOKEN_FILE}")
+    print(f"\nToken saved to: {token_path.absolute()}")
     print("You can now use the MCP server with 3-legged OAuth!")
 
 

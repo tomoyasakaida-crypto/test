@@ -14,7 +14,25 @@ class APSClient:
 
     BASE_URL = "https://developer.api.autodesk.com"
     AUTH_URL = f"{BASE_URL}/authentication/v2/token"
-    TOKEN_FILE = ".aps_token.json"
+
+    @staticmethod
+    def _get_token_file_path() -> Path:
+        """Get absolute path to token file in project root."""
+        # Try to find .env file location (project root)
+        current_dir = Path.cwd()
+
+        # Search up the directory tree for .env file
+        search_dir = current_dir
+        for _ in range(5):  # Search up to 5 levels
+            env_file = search_dir / ".env"
+            if env_file.exists():
+                return search_dir / ".aps_token.json"
+            search_dir = search_dir.parent
+
+        # Fallback to current directory
+        return current_dir / ".aps_token.json"
+
+    TOKEN_FILE = str(_get_token_file_path.__func__())
 
     def __init__(self, client_id: str, client_secret: str, use_3legged: bool = True):
         """
@@ -40,6 +58,7 @@ class APSClient:
     def _load_3legged_token(self):
         """Load 3-legged OAuth token from file."""
         token_path = Path(self.TOKEN_FILE)
+        print(f"Looking for token at: {token_path.absolute()}")
         if token_path.exists():
             try:
                 with open(token_path, "r") as f:
@@ -49,10 +68,13 @@ class APSClient:
                     # Calculate expiration time
                     expires_in = token_data.get("expires_in", 3600)
                     self.token_expires_at = time.time() + expires_in
-                    print(f"Loaded 3-legged OAuth token from {self.TOKEN_FILE}")
+                    print(f"✓ Loaded 3-legged OAuth token from {token_path.absolute()}")
             except Exception as e:
                 print(f"Error loading token file: {e}")
                 print("Please run auth.py to authenticate")
+        else:
+            print(f"Token file not found at: {token_path.absolute()}")
+            print("Please run: python auth.py")
 
     def _save_3legged_token(self, token_data: dict):
         """
